@@ -10,6 +10,20 @@
 
 // -----------------------------------------------------------------------
 
+// Left, Right, Front, and Rear speakers (diamond-located), with simple independent L-R and F-R panning.
+
+// #define DIAMOND_PLACED_SPEAKERS
+
+// FrontLeft, FrontRight, RearLeft, and RearRight speakers: room corners or car doors-like located. Here is each of L-R, F-R controls attenuates two channels but not one. If L-R is +0.1 and F-R is -0.2 then:
+// FrontLeft channel is *= (0.9*1.0),
+// FrontRight           *= (1.0*1.0),
+// RearLeft             *= (0.9*0.8),
+// and RearRight        *= (1.0*0.8).
+
+#define QUADRO_PLACED_SPEAKERS
+
+// -----------------------------------------------------------------------
+
 typedef struct {
     float a0, b1, z1;
 } Filter;
@@ -135,6 +149,8 @@ static void quadpanner_process(NativePluginHandle handle,
                                float** inBuffer, float** outBuffer, uint32_t frames,
                                const NativeMidiEvent* midiEvents, uint32_t midiEventCount)
 {
+
+#ifdef DIAMOND_PLACED_SPEAKERS
     float v1, v2, tmp;
 
     // left/right
@@ -164,6 +180,41 @@ static void quadpanner_process(NativePluginHandle handle,
     }
     handle_audio_buffers(inBuffer[2], outBuffer[2], &handlePtr->lowpass[2], v1, frames);
     handle_audio_buffers(inBuffer[3], outBuffer[3], &handlePtr->lowpass[3], v2, frames);
+#endif
+
+#ifdef QUADRO_PLACED_SPEAKERS
+    float v1, v2, v3, v4, // FrontLeft, FrontRight, RearLeft, and RearRight
+          tmp;
+
+    // left/right
+    if ((tmp = handlePtr->params[PARAM_LEFT_RIGHT]) < 0.f)
+    {
+        v1 = v3 = 1.f;
+        v2 = v4 = 1.f - tmp * -0.01f;
+    }
+    else
+    {
+        v1 = v3 = 1.f - tmp * 0.01f;
+        v2 = v4 = 1.f;
+    }
+
+    // front/rear
+    if ((tmp = handlePtr->params[PARAM_FRONT_REAR] * 0.01f) < 0.f)
+    {
+        v3 *= 1.f - -tmp;
+        v4 *= 1.f - -tmp;
+    }
+    else
+    {
+        v1 *= 1.f - tmp;
+        v2 *= 1.f - tmp;
+    }
+
+    handle_audio_buffers(inBuffer[0], outBuffer[0], &handlePtr->lowpass[0], v1, frames);
+    handle_audio_buffers(inBuffer[1], outBuffer[1], &handlePtr->lowpass[1], v2, frames);
+    handle_audio_buffers(inBuffer[2], outBuffer[2], &handlePtr->lowpass[2], v3, frames);
+    handle_audio_buffers(inBuffer[3], outBuffer[3], &handlePtr->lowpass[3], v4, frames);
+#endif
 
     return;
 
@@ -194,6 +245,8 @@ static intptr_t quadpanner_dispatcher(NativePluginHandle handle, NativePluginDis
 
 static const char* quadpanner_get_buffer_port_name(NativePluginHandle handle, uint32_t index, bool isOutput)
 {
+
+#ifdef DIAMOND_PLACED_SPEAKERS
     static const char* const kInNames[4] = {
         "In-Left",
         "In-Right",
@@ -206,6 +259,22 @@ static const char* quadpanner_get_buffer_port_name(NativePluginHandle handle, ui
         "Out-Front",
         "Out-Rear",
     };
+#endif
+
+#ifdef QUADRO_PLACED_SPEAKERS
+    static const char* const kInNames[4] = {
+        "In-FrontLeft",
+        "In-FrontRight",
+        "In-RearLeft",
+        "In-RearRight",
+    };
+    static const char* const kOutNames[4] = {
+        "Out-FrontLeft",
+        "Out-FrontRight",
+        "Out-RearLeft",
+        "Out-RearRight",
+    };
+#endif
 
     return isOutput ? kOutNames[index] : kInNames[index];
 
